@@ -1,10 +1,10 @@
-from pip import main
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 import hu_core_news_trf
 import requests
 import random
 import click
 import os
+import json
 
 
 def merge_disjointed_names(ner_results: list):
@@ -63,18 +63,23 @@ def morphological_analysis_husplacy(names_to_change: list[str]):
     return name_lemmas, name_morphs
 
 
+def _send_emagyar_request(text: str):
+    r = requests.post("http://127.0.0.1:5000/tok/morph", data={"text": "Ilonával"})
+    resp = r.text.split("\t")[-1]
+    info = json.loads(resp)
+    name_lemma = info[0]["lemma"]
+    name_morph = info[0]["tag"]
+    return name_lemma, name_morph
+
+
 def morphological_analysis_emagyar(names_to_change: list[str]):
     name_lemmas = []
     name_morphs = []
     for name in names_to_change:
-        r = requests.post('http://127.0.0.1:5000/tok/morph', data={'text': 'Ilonával'})
-        resp = r.text.split("\t")[-1]
-        info = json.loads(resp)
-        print(info[0]["tag"])
-        name_lemma = ""
-        for token in doc:
-            name_lemmas.append(token.lemma_)
-            name_morphs.append(token.morph.to_json())
+        name_lemma, name_morph = _send_emagyar_request(name)
+        name_lemmas.append(name_lemma)
+        name_morphs.append(name_morph)
+    return name_lemmas, name_morphs
 
 
 def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
@@ -98,7 +103,7 @@ def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
     return name_pseudonyms
 
 
-def generate_word_form(word_with_tag: str):
+def _generate_word_form(word_with_tag: str):
     body = {"text": word_with_tag}
     response = requests.post("http://dl3.nytud.hu:60004/translate", data=body)
     print(response.json())
