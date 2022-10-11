@@ -1,3 +1,4 @@
+from xml.dom.minidom import Element
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 import hu_core_news_trf
 import requests
@@ -6,6 +7,7 @@ import click
 import os
 import json
 import itertools
+import torch
 
 
 def merge_disjointed_names(ner_results: list):
@@ -33,6 +35,7 @@ def merge_disjointed_names(ner_results: list):
 
 
 def recognise_people(input: str):
+    device = 0 if torch.cuda.is_available() else -1
     tokenizer = AutoTokenizer.from_pretrained(
         "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
     )
@@ -40,7 +43,7 @@ def recognise_people(input: str):
         "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
     )
 
-    ner = pipeline("ner", model=model, tokenizer=tokenizer)
+    ner = pipeline("ner", model=model, tokenizer=tokenizer, device=device)
     temp_results = ner(input)
     ner_results = []
     for result in temp_results:
@@ -50,14 +53,27 @@ def recognise_people(input: str):
     return merge_disjointed_names(ner_results)
 
 
+def tokenize_emagyar(text: str):
+    r = requests.post("http://127.0.0.1:5000/tok", data={"text": text})
+    sentences = []
+    current_sentence = ""
+    for line in r.text.split("\n")[1:]:
+        if not line:
+            sentences.append(current_sentence + "\n")
+            current_sentence = ""
+            continue
+        line = line.replace('"', "")
+        line = line.replace("\\n", "")
+        word = line.split("\t")[0]
+        current_sentence += word + line.split("\t")[1]
+    return sentences
+
+
 def paginate_ner(text: str):
-    parts = [text[i : i + 500] for i in range(0, len(text), 400)] #FIXME split at space
-    results = [recognise_people(part) for part in parts]
-    r_names, r_positions = [],[]
-    for names, positions in results:
-        r_names.append(names)
-        r_positions.append(positions)
-    return r_names, r_positions
+    sentences = tokenize_emagyar(text)
+    results = [(recognise_people(part), part) for part in sentences]
+
+    return results
 
 
 def morphological_analysis_husplacy(names_to_change: list[str]):
@@ -75,9 +91,11 @@ def morphological_analysis_husplacy(names_to_change: list[str]):
 
 
 def _send_emagyar_request(text: str):
-    r = requests.post("http://127.0.0.1:5000/tok/morph", data={"text": "Ilonával"})
+    r = requests.post("http://127.0.0.1:5000/tok/morph", data={"text": text})
     resp = r.text.split("\t")[-1]
     info = json.loads(resp)
+    if not info:
+        return "", ""
     name_lemma = info[0]["lemma"]
     name_morph = info[0]["tag"]
     return name_lemma, name_morph
@@ -97,10 +115,10 @@ def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
     female_names = []
     male_names = []
 
-    with open("/content/female_names.txt", "r") as f:
+    with open("./content/female_names.txt", "r", encoding="utf8") as f:
         for line in f:
             female_names.append(line.strip())
-    with open("/content/male_names.txt", "r") as f:
+    with open("./content/male_names.txt", "r", encoding="utf8") as f:
         for line in f:
             male_names.append(line.strip())
     name_pseudonyms = []
@@ -115,16 +133,31 @@ def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
 
 
 def _generate_word_form(word_with_tag: str):
-    body = {"text": word_with_tag}
-    response = requests.post("http://dl3.nytud.hu:60004/translate", data=body)
-    print(response.json())
+    url = "https://juniper.nytud.hu/demo/nlp/trans/morph"
+    payload = json.dumps({"text": word_with_tag})
+    response = requests.request(
+        "POST", url, headers={"Content-Type": "application/json"}, data=payload
+    )
+    return response.json()["text"]
 
 
 def run_emagyar_pipeline(text: str):
-    people_names, name_positions = paginate_ner(text)
-    name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
-    peudonyms = find_pseudonyms_for_lemmas(name_lemmas)
-    
+    zipped = paginate_ner(text)
+    result = []
+    for elem in zipped:
+        double, sentence = elem
+        people_names, name_positions = double
+        name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
+        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas)
+        for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
+            name_with_tag = pseudonym + morph
+            generated = _generate_word_form(name_with_tag)
+            sentence = (
+                sentence[: position["start"]] + generated + sentence[position["end"] :]
+            )
+        result.append(sentence)
+    print(result)
+    return result
 
 
 def run_huspacy_pipeline(text: str):
@@ -142,7 +175,8 @@ def process(file_input, format, only_ner):
         text = f.readlines()
         text = "".join(text)
     if only_ner:
-        print(paginate_ner(text))
+        paginate_ner(text)
+        return
     if format == "emagyar":
         run_emagyar_pipeline(text)
     else:
