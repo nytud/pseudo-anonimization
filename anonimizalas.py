@@ -5,6 +5,7 @@ import random
 import click
 import os
 import json
+import itertools
 
 
 def merge_disjointed_names(ner_results: list):
@@ -26,7 +27,7 @@ def merge_disjointed_names(ner_results: list):
             name_positions.append(
                 {"start": result.get("start"), "end": result.get("end")}
             )
-    previous = result
+        previous = result
 
     return names_to_change, name_positions
 
@@ -47,6 +48,16 @@ def recognise_people(input: str):
             ner_results.append(result)
 
     return merge_disjointed_names(ner_results)
+
+
+def paginate_ner(text: str):
+    parts = [text[i : i + 500] for i in range(0, len(text), 400)] #FIXME split at space
+    results = [recognise_people(part) for part in parts]
+    r_names, r_positions = [],[]
+    for names, positions in results:
+        r_names.append(names)
+        r_positions.append(positions)
+    return r_names, r_positions
 
 
 def morphological_analysis_husplacy(names_to_change: list[str]):
@@ -110,19 +121,28 @@ def _generate_word_form(word_with_tag: str):
 
 
 def run_emagyar_pipeline(text: str):
-    pass
+    people_names, name_positions = paginate_ner(text)
+    name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
+    peudonyms = find_pseudonyms_for_lemmas(name_lemmas)
+    
 
 
 def run_huspacy_pipeline(text: str):
-    pass
+    people_names, name_positions = paginate_ner(text)
+    name_lemmas, name_morphs = morphological_analysis_husplacy(people_names)
+    peudonyms = find_pseudonyms_for_lemmas(name_lemmas)
 
 
 @click.command()
-@click.option("--input", default="", help="path of the input file")
-@click.option("--format", prompt="", help="The person to greet.")
-def process(input, format):
-    with open(os.path.join(os.getcwd(), input), "r") as f:
-        text = f.read()
+@click.option("--file-input", help="path of the input file")
+@click.option("--format", help="pipeline to run: emagyar, huspacy")
+@click.option("--only-ner", help="only run the NER on the input")
+def process(file_input, format, only_ner):
+    with open(os.path.join(os.getcwd(), file_input), "r", encoding="utf8") as f:
+        text = f.readlines()
+        text = "".join(text)
+    if only_ner:
+        print(paginate_ner(text))
     if format == "emagyar":
         run_emagyar_pipeline(text)
     else:
