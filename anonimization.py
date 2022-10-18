@@ -57,7 +57,7 @@ def recognise_people(input: str):
 def tokenize_emagyar(text: str):
     r = requests.post("http://127.0.0.1:5000/tok", data={"text": text})
     sentences = []
-    current_sentence = "" #FIXME read tsv
+    current_sentence = ""  # FIXME read tsv
     for line in r.text.split("\n")[1:]:
         if not line:
             sentences.append(current_sentence + "\n")
@@ -69,18 +69,20 @@ def tokenize_emagyar(text: str):
         current_sentence += word + line.split("\t")[1]
     return sentences
 
-def tokenize_huspacy(text:str) -> list[str]:
+
+def tokenize_huspacy(text: str) -> list[str]:
     nlp = hu_core_news_trf.load()
     segments = nlp(text)
-    sentences  = []
+    sentences = []
     current = ""
     for token in segments:
         if token == "\n":
             sentences.append(current)
-            current = ''
+            current = ""
             continue
         current += token
     return sentences
+
 
 def paginate_ner(text: str, is_emagyar: bool):
     if is_emagyar:
@@ -148,8 +150,10 @@ def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
     return name_pseudonyms
 
 
-def _generate_word_form(word_with_tag: str, is_emagyar:bool = True):
-    url = "https://juniper.nytud.hu/demo/nlp/trans/morph"
+def _generate_word_form(word_with_tag: str, is_emagyar: bool = True):
+    url = "https://juniper.nytud.hu/demo/nlp/trans/morph-ud"
+    if is_emagyar:
+        url = "https://juniper.nytud.hu/demo/nlp/trans/morph-em"
     payload = json.dumps({"text": word_with_tag})
     response = requests.request(
         "POST", url, headers={"Content-Type": "application/json"}, data=payload
@@ -193,6 +197,7 @@ def run_huspacy_pipeline(text: str):
         result.append(sentence)
     print(result)
     return result
+
 
 @click.command()
 @click.option("--file-input", help="path of the input file")

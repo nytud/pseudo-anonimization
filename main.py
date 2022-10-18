@@ -1,11 +1,11 @@
 from email import message
-from http.client import HTTPException
+from http.client import HTTPException, HTTPResponse
 from typing import Union
-from django.shortcuts import HttpResponse
+
 
 from fastapi import Body, FastAPI, UploadFile, status
 
-from anonimizalas import paginate_ner, run_emagyar_pipeline, run_huspacy_pipeline
+from anonimization import paginate_ner, run_emagyar_pipeline, run_huspacy_pipeline
 
 app = FastAPI()
 
@@ -18,7 +18,7 @@ def read_root():
 @app.get("/tokenize/emagyar")
 def emagyar_only_tok(file: UploadFile | None = None, text: str | None = None = Body()):
     if not file and not text:
-        return HttpResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
+        return HTTPResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
     if file:
         contents = str(file.read())
         return paginate_ner(contents, True)
@@ -29,7 +29,7 @@ def emagyar_only_tok(file: UploadFile | None = None, text: str | None = None = B
 @app.get("/tokenize/huspacy")
 def huspacy_only_tok(file: UploadFile | None = None, text: str | None = None = Body()):
     if not file and not text:
-        return HttpResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
+        return HTTPResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
     if file:
         contents = str(file.read())
         return paginate_ner(contents, False)
@@ -40,7 +40,7 @@ def huspacy_only_tok(file: UploadFile | None = None, text: str | None = None = B
 @app.get("/swap/emagyar")
 def emagyar_full_pipeline(file: UploadFile | None = None, text: str | None = None = Body()):
     if not file and not text:
-        return HttpResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
+        return HTTPResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
     if file:
         contents = str(file.read())
         return run_emagyar_pipeline(contents)
@@ -51,7 +51,7 @@ def emagyar_full_pipeline(file: UploadFile | None = None, text: str | None = Non
 @app.get("/swap/huspacy")
 def husplacy_full_pipeline(file: UploadFile | None = None, text: str | None = None = Body()):
     if not file and not text:
-        return HttpResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
+        return HTTPResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, message="No file or text provided in the body of the request")
     if file:
         contents = str(file.read())
         return run_huspacy_pipeline(contents)
