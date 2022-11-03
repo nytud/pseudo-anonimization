@@ -17,4 +17,4 @@ RUN python3 -m pip install --no-cache-dir uwsgi cython numpy && python3 -m pip i
 RUN python3 -m pip install --no-cache-dir https://huggingface.co/huspacy/hu_core_news_trf/resolve/main/hu_core_news_trf-any-py3-none-any.whl
 COPY . /app
 EXPOSE 8000
-CMD [“python”, “./main.py”]
+CMD ["uvicorn", "main:app"]
