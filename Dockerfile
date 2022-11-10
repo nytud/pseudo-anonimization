@@ -16,5 +16,4 @@ COPY requirements.txt /app/
 RUN python3 -m pip install --no-cache-dir uwsgi cython numpy && python3 -m pip install --no-cache-dir -r requirements.txt
 RUN python3 -m pip install --no-cache-dir https://huggingface.co/huspacy/hu_core_news_trf/resolve/main/hu_core_news_trf-any-py3-none-any.whl
 COPY . /app
-EXPOSE 8000
-CMD ["uvicorn", "main:app"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
