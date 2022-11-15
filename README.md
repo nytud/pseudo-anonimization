@@ -65,3 +65,31 @@ available endpoints:
 - /swap/huspacy
 
 all endpoints requires a file input or body:{"text":"text to  process"}
+
+component diagram 
+@startuml
+agent text
+queue "morphological analysis" as morpho
+database "Hungarian given names" as given
+queue "generate form of pseudo anonymized name" as gen
+queue NER
+
+component emtsv
+component huspacy
+component NerKor
+component PseudoAnonimizator as pseu
+
+text --> pseu
+pseu -right-> NER
+NER --> NerKor
+NerKor --> pseu
+pseu -right-> morpho
+morpho -- emtsv
+morpho -- huspacy
+pseu -right-> given : select pseudo name
+pseu --> gen
+gen -- emtsv
+gen -- huspacy
+
+@enduml
+

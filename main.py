@@ -1,8 +1,9 @@
-from http.client import HTTPResponse
 from typing import Optional
-from pydantic import BaseModel
 
-from fastapi import FastAPI, UploadFile, status
+from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from anonimization import paginate_ner, run_emagyar_pipeline, run_huspacy_pipeline
 
@@ -18,57 +19,65 @@ def read_root():
     return {"ping": "pong"}
 
 
-@app.get("/tokenize/emagyar")
-def emagyar_only_tok(file: Optional[UploadFile], text: Optional[Text]):
+@app.post("/tokenize/emagyar")
+async def emagyar_only_tok(
+    file: Optional[UploadFile] = None, text: Optional[Text] = None
+):
     if not file and not text:
-        return HTTPResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            message="No file or text provided in the body of the request",
+        raise HTTPException(
+            status_code=422,
+            detail="No file or text provided in the body of the request",
         )
     if file:
-        contents = str(file.read())
+        contents = str(await file.read(), "utf8")
         return paginate_ner(contents, True)
     if text:
         return paginate_ner(text, True)
 
 
-@app.get("/tokenize/huspacy")
-def huspacy_only_tok(file: Optional[UploadFile], text: Optional[Text]):
+@app.post("/tokenize/huspacy")
+async def huspacy_only_tok(
+    file: Optional[UploadFile] = None, text: Optional[Text] = None
+):
     if not file and not text:
-        return HTTPResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            message="No file or text provided in the body of the request",
+        raise HTTPException(
+            status_code=422,
+            detail="No file or text provided in the body of the request",
         )
     if file:
-        contents = str(file.read())
+        contents = str(await file.read(), "utf8")
         return paginate_ner(contents, False)
     if text:
         return paginate_ner(text, False)
 
 
-@app.get("/swap/emagyar")
-def emagyar_full_pipeline(file: Optional[UploadFile], text: Optional[Text]):
+@app.post("/swap/emagyar")
+async def emagyar_full_pipeline(
+    file: Optional[UploadFile] = None, text: Optional[Text] = None
+):
     if not file and not text:
-        return HTTPResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            message="No file or text provided in the body of the request",
+        raise HTTPException(
+            status_code=422,
+            detail="No file or text provided in the body of the request",
         )
     if file:
-        contents = str(file.read())
+        contents = str(await file.read(), "utf8")
         return run_emagyar_pipeline(contents)
     if text:
         return run_emagyar_pipeline(text)
 
 
-@app.get("/swap/huspacy")
-def husplacy_full_pipeline(file: Optional[UploadFile], text: Optional[Text]):
+@app.post("/swap/huspacy")
+async def husplacy_full_pipeline(
+    file: Optional[UploadFile] = None, text: Optional[Text] = None
+):
     if not file and not text:
-        return HTTPResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            message="No file or text provided in the body of the request",
+        raise HTTPException(
+            status_code=422,
+            detail="No file or text provided in the body of the request",
         )
     if file:
-        contents = str(file.read())
+        contents = str(await file.read(), "utf8")
         return run_huspacy_pipeline(contents)
     if text:
         return run_huspacy_pipeline(text)

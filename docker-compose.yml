@@ -1,12 +1,14 @@
 version: "3.9"
 services:
+  emtsv:
+    image: "mtaril/emtsv"
+    ports:
+      - "5000:5000"
   web:
     build: .
     ports:
       - "80:80"
+    depends_on:
+      - "emtsv"
     links:
-      - emtsv
-  emtsv:
-    image: "mtaril/emtsv"
-    expose:
-      - "80"
+      - "emtsv:mtaril/emtsv"

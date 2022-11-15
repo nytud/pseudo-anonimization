@@ -55,7 +55,7 @@ def recognise_people(input: str):
 
 
 def tokenize_emagyar(text: str):
-    r = requests.post("http://127.0.0.1:5000/tok", data={"text": text})
+    r = requests.post("http://host.docker.internal:5000/tok", data={"text": text})
     sentences = []
     current_sentence = ""  # FIXME read tsv
     for line in r.text.split("\n")[1:]:
@@ -109,7 +109,7 @@ def morphological_analysis_huspacy(names_to_change: list[str]):
 
 
 def _send_emagyar_request(text: str):
-    r = requests.post("http://127.0.0.1:5000/tok/morph", data={"text": text})
+    r = requests.post("http://host.docker.internal/tok/morph", data={"text": text})
     resp = r.text.split("\t")[-1]
     info = json.loads(resp)
     if not info:
