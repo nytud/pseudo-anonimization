@@ -1,4 +1,4 @@
-from xml.dom.minidom import Element
+import csv
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 import hu_core_news_trf
 import requests
@@ -6,9 +6,8 @@ import random
 import click
 import os
 import json
-import itertools
 import torch
-import csv
+from os import environ
 
 
 def merge_disjointed_names(ner_results: list):
@@ -55,7 +54,7 @@ def recognise_people(input: str):
 
 
 def tokenize_emagyar(text: str):
-    r = requests.post("http://host.docker.internal:5000/tok", data={"text": text})
+    r = requests.post(f"http://{environ['host']}:5000/tok", data={"text": text})
     sentences = []
     current_sentence = ""  # FIXME read tsv
     for line in r.text.split("\n")[1:]:
@@ -64,7 +63,7 @@ def tokenize_emagyar(text: str):
             current_sentence = ""
             continue
         line = line.replace('"', "")
-        line = line.replace("\\n", "")
+        line = line.replace("\\n", "\n")
         word = line.split("\t")[0]
         current_sentence += word + line.split("\t")[1]
     return sentences
@@ -84,13 +83,13 @@ def tokenize_huspacy(text: str) -> list[str]:
     return sentences
 
 
-def paginate_ner(text: str, is_emagyar: bool):
+def paginate_ner(text: str, is_emagyar: bool = False):
     if is_emagyar:
         sentences = tokenize_emagyar(text)
     else:
         sentences = tokenize_huspacy(text)
     results = [(recognise_people(part), part) for part in sentences]
-
+    print(results)
     return results
 
 
@@ -109,7 +108,7 @@ def morphological_analysis_huspacy(names_to_change: list[str]):
 
 
 def _send_emagyar_request(text: str):
-    r = requests.post("http://host.docker.internal/tok/morph", data={"text": text})
+    r = requests.post(f"http://{environ['host']}:5000/tok/morph", data={"text": text})
     resp = r.text.split("\t")[-1]
     info = json.loads(resp)
     if not info:
@@ -169,12 +168,16 @@ def run_emagyar_pipeline(text: str):
         people_names, name_positions = double
         name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
         pseudonyms = find_pseudonyms_for_lemmas(name_lemmas)
+        delta = 0
         for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
             name_with_tag = pseudonym + morph
             generated = _generate_word_form(name_with_tag)
+            original_length = position["end"] - position["start"]
+            new_length = len(generated)
             sentence = (
-                sentence[: position["start"]] + generated + sentence[position["end"] :]
+                sentence[: position["start"] - delta] + generated + sentence[position["end"] - delta :]
             )
+            delta = original_length - new_length
         result.append(sentence)
     print(result)
     return result
@@ -204,9 +207,13 @@ def run_huspacy_pipeline(text: str):
 @click.option("--format", help="pipeline to run: emagyar, huspacy")
 @click.option("--only-ner", help="only run the NER on the input")
 def process(file_input, format, only_ner):
+    environ["host"] = "localhost"
     with open(os.path.join(os.getcwd(), file_input), "r", encoding="utf8") as f:
         text = f.readlines()
         text = "".join(text)
+    if only_ner and format == "emagyar":
+        paginate_ner(text, True)
+        return
     if only_ner:
         paginate_ner(text)
         return

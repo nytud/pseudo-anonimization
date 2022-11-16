@@ -34,6 +34,7 @@ source .ve/bin/activate
 
 ```bash
 pip install -r requirements.txt
+pip install  https://huggingface.co/huspacy/hu_core_news_trf/resolve/main/hu_core_news_trf-any-py3-none-any.whl
 ```
 
 ### Starting
