@@ -128,22 +128,29 @@ def morphological_analysis_emagyar(names_to_change: list[str]):
     return name_lemmas, name_morphs
 
 
-def find_pseudonyms_for_lemmas(name_lemmas: list[str]):
-    female_names = []
-    male_names = []
+def find_pseudonyms_for_lemmas(name_lemmas: list[str], is_consistent:bool = True):
+    female_names = set()
+    male_names = set()
+    used_pseudo_names = {}
 
     with open("./content/female_names.txt", "r", encoding="utf8") as f:
         for line in f:
-            female_names.append(line.strip())
+            female_names.add(line.strip())
     with open("./content/male_names.txt", "r", encoding="utf8") as f:
         for line in f:
-            male_names.append(line.strip())
+            male_names.add(line.strip())
     name_pseudonyms = []
     for name in name_lemmas:
-        if name in male_names:
-            name_pseudonyms.append(random.choice(male_names))
+        if name in used_pseudo_names and not is_consistent:
+            name_pseudonyms.append(used_pseudo_names[name])
+        elif name in male_names:
+            chosen_pseudo_name = random.choice(male_names)
+            used_pseudo_names[name] = chosen_pseudo_name
+            name_pseudonyms.append(chosen_pseudo_name)
         elif name in female_names:
-            name_pseudonyms.append(random.choice(female_names))
+            chosen_pseudo_name = random.choice(female_names)
+            used_pseudo_names[name] = chosen_pseudo_name
+            name_pseudonyms.append(chosen_pseudo_name)
         else:
             name_pseudonyms.append(name)
     return name_pseudonyms
@@ -160,14 +167,14 @@ def _generate_word_form(word_with_tag: str, is_emagyar: bool = True):
     return response.json()["text"]
 
 
-def run_emagyar_pipeline(text: str):
+def run_emagyar_pipeline(text: str, is_consistent:bool):
     zipped = paginate_ner(text, True)
     result = []
     for elem in zipped:
         double, sentence = elem
         people_names, name_positions = double
         name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
-        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas)
+        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas,is_consistent )
         delta = 0
         for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
             name_with_tag = pseudonym + morph
@@ -183,14 +190,14 @@ def run_emagyar_pipeline(text: str):
     return result
 
 
-def run_huspacy_pipeline(text: str):
+def run_huspacy_pipeline(text: str, is_consistent:bool):
     zipped = paginate_ner(text, False)
     result = []
     for elem in zipped:
         double, sentence = elem
         people_names, name_positions = double
         name_lemmas, name_morphs = morphological_analysis_huspacy(people_names)
-        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas)
+        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas. is_consistent)
         for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
             name_with_tag = pseudonym + morph
             generated = _generate_word_form(name_with_tag, False)
@@ -206,7 +213,8 @@ def run_huspacy_pipeline(text: str):
 @click.option("--file-input", help="path of the input file")
 @click.option("--format", help="pipeline to run: emagyar, huspacy")
 @click.option("--only-ner", help="only run the NER on the input")
-def process(file_input, format, only_ner):
+@click.option("--is-consistent", help="the same name will be changed consistently in the text")
+def process(file_input, format, only_ner, is_consistent=True):
     environ["host"] = "localhost"
     with open(os.path.join(os.getcwd(), file_input), "r", encoding="utf8") as f:
         text = f.readlines()
@@ -218,9 +226,9 @@ def process(file_input, format, only_ner):
         paginate_ner(text)
         return
     if format == "emagyar":
-        run_emagyar_pipeline(text)
+        run_emagyar_pipeline(text, is_consistent)
     else:
-        run_huspacy_pipeline(text)
+        run_huspacy_pipeline(text, is_consistent)
 
 
 if __name__ == "__main__":
