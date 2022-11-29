@@ -7,7 +7,10 @@ import click
 import os
 import json
 import torch
-from os import environ
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+EMTSV_URL = os.getenv("EMTSV_URL", "http://localhost:5000")
 
 
 def merge_disjointed_names(ner_results: list):
@@ -36,11 +39,17 @@ def merge_disjointed_names(ner_results: list):
 
 def recognise_people(input: str):
     device = 0 if torch.cuda.is_available() else -1
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
+    # )
+    # model = AutoModelForTokenClassification.from_pretrained(
+    #     "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
+    # )
     tokenizer = AutoTokenizer.from_pretrained(
-        "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
+        "/models/NYTK/named-entity-recognition-nerkor-hubert-hungarian"
     )
     model = AutoModelForTokenClassification.from_pretrained(
-        "NYTK/named-entity-recognition-nerkor-hubert-hungarian"
+        "/models/NYTK/named-entity-recognition-nerkor-hubert-hungarian"
     )
 
     ner = pipeline("ner", model=model, tokenizer=tokenizer, device=device)
@@ -54,7 +63,7 @@ def recognise_people(input: str):
 
 
 def tokenize_emagyar(text: str):
-    r = requests.post(f"http://{environ['host']}:5000/tok", data={"text": text})
+    r = requests.post(f"{EMTSV_URL}/tok", data={"text": text})
     sentences = []
     current_sentence = ""  # FIXME read tsv
     for line in r.text.split("\n")[1:]:
@@ -108,7 +117,7 @@ def morphological_analysis_huspacy(names_to_change: list[str]):
 
 
 def _send_emagyar_request(text: str):
-    r = requests.post(f"http://{environ['host']}:5000/tok/morph", data={"text": text})
+    r = requests.post(f"{EMTSV_URL}/tok/morph", data={"text": text})
     resp = r.text.split("\t")[-1]
     info = json.loads(resp)
     if not info:
@@ -128,15 +137,16 @@ def morphological_analysis_emagyar(names_to_change: list[str]):
     return name_lemmas, name_morphs
 
 
-def find_pseudonyms_for_lemmas(name_lemmas: list[str], is_consistent:bool = True):
+def find_pseudonyms_for_lemmas(name_lemmas: list[str], is_consistent: bool = True):
     female_names = set()
     male_names = set()
     used_pseudo_names = {}
 
-    with open("./content/female_names.txt", "r", encoding="utf8") as f:
+    # TODO Ezt ki kell emelni init időbe
+    with open(f"{ROOT_DIR}/contents/female_names.txt", "r", encoding="utf-8") as f:
         for line in f:
             female_names.add(line.strip())
-    with open("./content/male_names.txt", "r", encoding="utf8") as f:
+    with open(f"{ROOT_DIR}/contents/male_names.txt", "r", encoding="utf-8") as f:
         for line in f:
             male_names.add(line.strip())
     name_pseudonyms = []
@@ -144,11 +154,11 @@ def find_pseudonyms_for_lemmas(name_lemmas: list[str], is_consistent:bool = True
         if name in used_pseudo_names and not is_consistent:
             name_pseudonyms.append(used_pseudo_names[name])
         elif name in male_names:
-            chosen_pseudo_name = random.choice(male_names)
+            chosen_pseudo_name = random.choice(list(male_names))
             used_pseudo_names[name] = chosen_pseudo_name
             name_pseudonyms.append(chosen_pseudo_name)
         elif name in female_names:
-            chosen_pseudo_name = random.choice(female_names)
+            chosen_pseudo_name = random.choice(list(female_names))
             used_pseudo_names[name] = chosen_pseudo_name
             name_pseudonyms.append(chosen_pseudo_name)
         else:
@@ -167,14 +177,14 @@ def _generate_word_form(word_with_tag: str, is_emagyar: bool = True):
     return response.json()["text"]
 
 
-def run_emagyar_pipeline(text: str, is_consistent:bool):
+def run_emagyar_pipeline(text: str, is_consistent: bool):
     zipped = paginate_ner(text, True)
     result = []
     for elem in zipped:
         double, sentence = elem
         people_names, name_positions = double
         name_lemmas, name_morphs = morphological_analysis_emagyar(people_names)
-        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas,is_consistent )
+        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas, is_consistent)
         delta = 0
         for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
             name_with_tag = pseudonym + morph
@@ -182,7 +192,7 @@ def run_emagyar_pipeline(text: str, is_consistent:bool):
             original_length = position["end"] - position["start"]
             new_length = len(generated)
             sentence = (
-                sentence[: position["start"] - delta] + generated + sentence[position["end"] - delta :]
+                    sentence[: position["start"] - delta] + generated + sentence[position["end"] - delta:]
             )
             delta = original_length - new_length
         result.append(sentence)
@@ -190,19 +200,19 @@ def run_emagyar_pipeline(text: str, is_consistent:bool):
     return result
 
 
-def run_huspacy_pipeline(text: str, is_consistent:bool):
+def run_huspacy_pipeline(text: str, is_consistent: bool):
     zipped = paginate_ner(text, False)
     result = []
     for elem in zipped:
         double, sentence = elem
         people_names, name_positions = double
         name_lemmas, name_morphs = morphological_analysis_huspacy(people_names)
-        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas. is_consistent)
+        pseudonyms = find_pseudonyms_for_lemmas(name_lemmas.is_consistent)
         for position, morph, pseudonym in zip(name_positions, name_morphs, pseudonyms):
             name_with_tag = pseudonym + morph
             generated = _generate_word_form(name_with_tag, False)
             sentence = (
-                sentence[: position["start"]] + generated + sentence[position["end"] :]
+                    sentence[: position["start"]] + generated + sentence[position["end"]:]
             )
         result.append(sentence)
     print(result)
@@ -215,10 +225,8 @@ def run_huspacy_pipeline(text: str, is_consistent:bool):
 @click.option("--only-ner", help="only run the NER on the input")
 @click.option("--is-consistent", help="the same name will be changed consistently in the text")
 def process(file_input, format, only_ner, is_consistent=True):
-    environ["host"] = "localhost"
     with open(os.path.join(os.getcwd(), file_input), "r", encoding="utf8") as f:
-        text = f.readlines()
-        text = "".join(text)
+        text = f.read().strip()
     if only_ner and format == "emagyar":
         paginate_ner(text, True)
         return

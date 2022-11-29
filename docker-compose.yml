@@ -2,13 +2,25 @@ version: "3.9"
 services:
   emtsv:
     image: "mtaril/emtsv"
-    ports:
-      - "5000:5000"
-  web:
+    networks:
+      - network_anonymizer
+  anonymizer:
     build: .
+    image: docker.nlp.nytud.hu/anonymizer:latest
+    entrypoint: ["bash", "/app/entrypoint.sh"]
+    volumes:
+      - ./models:/models
     ports:
-      - "80:80"
+      - ${PORT}:80
+    environment:
+      - EMTSV_URL=http://emtsv:5000
     depends_on:
       - "emtsv"
     links:
       - "emtsv:mtaril/emtsv"
+    networks:
+      - network_anonymizer
+networks:
+  network_anonymizer:
+    external:
+      name: network_anonymizer
