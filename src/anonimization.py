@@ -1,4 +1,4 @@
-import csv
+import logging
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 import hu_core_news_trf
 import requests
@@ -7,6 +7,8 @@ import click
 import os
 import json
 import torch
+
+logger = logging.getLogger("src.anonimization")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -92,13 +94,14 @@ def tokenize_huspacy(text: str) -> list[str]:
     return sentences
 
 
-def paginate_ner(text: str, is_emagyar: bool = False):
-    if is_emagyar:
+def paginate_ner(text: str, morph_code_type: str = None):
+    if morph_code_type == "emagyar":
         sentences = tokenize_emagyar(text)
     else:
         sentences = tokenize_huspacy(text)
+
     results = [(recognise_people(part), part) for part in sentences]
-    print(results)
+    logger.debug(f"Output of paginate_ner: {results}")
     return results
 
 
@@ -122,6 +125,7 @@ def _send_emagyar_request(text: str):
     info = json.loads(resp)
     if not info:
         return "", ""
+    logger.debug(f"emagyar output: {info}")
     name_lemma = info[0]["lemma"]
     name_morph = info[0]["tag"]
     return name_lemma, name_morph
@@ -138,17 +142,16 @@ def morphological_analysis_emagyar(names_to_change: list[str]):
 
 
 def find_pseudonyms_for_lemmas(name_lemmas: list[str], is_consistent: bool = True):
-    female_names = set()
-    male_names = set()
+    female_names: set = None
+    male_names: set = None
     used_pseudo_names = {}
 
     # TODO Ezt ki kell emelni init időbe
     with open(f"{ROOT_DIR}/contents/female_names.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            female_names.add(line.strip())
+        female_names = set([line.strip() for line in f.readlines()])
     with open(f"{ROOT_DIR}/contents/male_names.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            male_names.add(line.strip())
+        male_names = set([line.strip() for line in f.readlines()])
+
     name_pseudonyms = []
     for name in name_lemmas:
         if name in used_pseudo_names and not is_consistent:
@@ -170,7 +173,10 @@ def _generate_word_form(word_with_tag: str, is_emagyar: bool = True):
     url = "https://juniper.nytud.hu/demo/nlp/trans/morph-ud"
     if is_emagyar:
         url = "https://juniper.nytud.hu/demo/nlp/trans/morph-em"
+
     payload = json.dumps({"text": word_with_tag})
+    # TODO ide rengeteg hibakezelést kell tenni. Mi van, ha nem válaszol? Ha nem jsont válaszol?
+    #  Ha nem jól formált választ ad?
     response = requests.request(
         "POST", url, headers={"Content-Type": "application/json"}, data=payload
     )
@@ -178,7 +184,7 @@ def _generate_word_form(word_with_tag: str, is_emagyar: bool = True):
 
 
 def run_emagyar_pipeline(text: str, is_consistent: bool):
-    zipped = paginate_ner(text, True)
+    zipped = paginate_ner(text, "emagyar")
     result = []
     for elem in zipped:
         double, sentence = elem
@@ -221,23 +227,26 @@ def run_huspacy_pipeline(text: str, is_consistent: bool):
 
 @click.command()
 @click.option("--file-input", help="path of the input file")
-@click.option("--format", help="pipeline to run: emagyar, huspacy")
+@click.option("--morph-code-type", help="pipeline to run: emagyar, huspacy")
 @click.option("--only-ner", help="only run the NER on the input")
 @click.option("--is-consistent", help="the same name will be changed consistently in the text")
-def process(file_input, format, only_ner, is_consistent=True):
+def process_file(file_input: str, morph_code_type: str, only_ner: bool, is_consistent: bool = True) -> None:
     with open(os.path.join(os.getcwd(), file_input), "r", encoding="utf8") as f:
         text = f.read().strip()
-    if only_ner and format == "emagyar":
-        paginate_ner(text, True)
-        return
+    process(text, morph_code_type, only_ner, is_consistent)
+
+
+def process(text: str, morph_code_type: str, only_ner: bool, is_consistent: bool = True) -> str:
+
     if only_ner:
-        paginate_ner(text)
-        return
-    if format == "emagyar":
-        run_emagyar_pipeline(text, is_consistent)
+        return paginate_ner(text, morph_code_type)
     else:
-        run_huspacy_pipeline(text, is_consistent)
+        if morph_code_type == "emagyar":
+            return run_emagyar_pipeline(text, is_consistent)
+        else:
+            return run_huspacy_pipeline(text, is_consistent)
 
 
 if __name__ == "__main__":
-    process()
+    logging.basicConfig(level=logging.DEBUG)
+    process_file()

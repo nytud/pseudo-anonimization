@@ -7,13 +7,16 @@ services:
   anonymizer:
     build: .
     image: docker.nlp.nytud.hu/anonymizer:latest
+    runtime: nvidia
     entrypoint: ["bash", "/app/entrypoint.sh"]
     volumes:
       - ./models:/models
+      - ./src:/app/src
     ports:
       - ${PORT}:80
     environment:
       - EMTSV_URL=http://emtsv:5000
+      - CUDA_VISIBLE_DEVICES=${GPU}
     depends_on:
       - "emtsv"
     links:

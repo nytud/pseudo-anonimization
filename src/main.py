@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, HTTPException, Body
@@ -5,8 +6,9 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from anonimization import paginate_ner, run_emagyar_pipeline, run_huspacy_pipeline
+from anonimization import paginate_ner, run_emagyar_pipeline, run_huspacy_pipeline, process
 
+logging.basicConfig(level=logging.DEBUG)
 app = FastAPI()
 
 
@@ -19,9 +21,15 @@ def read_root():
     return {"ping": "pong"}
 
 
+@app.post("/anonymization")
+async def anonymization(item: Text):
+    result = process(item.text, morph_code_type="emagyar", only_ner=False, is_consistent=False)
+    return result
+
+
 @app.post("/tokenize/emagyar")
 async def emagyar_only_tok(
-    file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
+        file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
 ):
     if not file and not text:
         raise HTTPException(
@@ -37,7 +45,7 @@ async def emagyar_only_tok(
 
 @app.post("/tokenize/huspacy")
 async def huspacy_only_tok(
-    file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
+        file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
 ):
     if not file and not text:
         raise HTTPException(
@@ -53,7 +61,7 @@ async def huspacy_only_tok(
 
 @app.post("/swap/emagyar")
 async def emagyar_full_pipeline(
-    file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
+        file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
 ):
     if not file and not text:
         raise HTTPException(
@@ -69,7 +77,7 @@ async def emagyar_full_pipeline(
 
 @app.post("/swap/huspacy")
 async def husplacy_full_pipeline(
-    file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
+        file: Optional[UploadFile] = None, text: Optional[Text] = Body(embed=True)
 ):
     if not file and not text:
         raise HTTPException(
