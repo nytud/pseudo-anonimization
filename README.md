@@ -52,14 +52,16 @@ python .\anonimization.py --file-input "path/to/file" --format=[emagyar, huspacy
 ```
 
 ## Starting as server
+First of all the `.env` file should be created based on the `example.env` file. The PORT and the GPU ids should be set.
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-the server is available on port 8000
+the server is available on the previously allocated port. 
 available endpoints:
-
+- /docs : SWAGGER based documentation of the API
+- /anonymization : segment based execution of the anonymization program
 - /tokenize/emagyar : only tokenizes the input
 - /tokenize/huspacy
 - /swap/emagyar
