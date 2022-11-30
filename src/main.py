@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Optional
 
@@ -16,15 +17,21 @@ class Text(BaseModel):
     text: str
 
 
+class CurliCatTextInput(BaseModel):
+    text: str
+    format: str = "text"
+
+
 @app.get("/ping")
 def read_root():
     return {"ping": "pong"}
 
 
-@app.post("/anonymization")
-async def anonymization(item: Text):
-    result = process(item.text, morph_code_type="emagyar", only_ner=False, is_consistent=False)
-    return result
+@app.post("/anonymize")
+async def anonymization(item: CurliCatTextInput):
+    result = {"original_text": item.text, "format": item.format}
+    result["anonymized_text"] = "\n".join([line.strip() for line in process(item.text, morph_code_type="emagyar", only_ner=False, is_consistent=False)[:-1]])
+    return json.dumps(result, ensure_ascii=False)
 
 
 @app.post("/tokenize/emagyar")
